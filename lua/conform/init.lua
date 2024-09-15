@@ -33,18 +33,27 @@ function Profiler:push(trace)
   end
   self:flush()
   table.insert(self.stack, trace)
+  return #self.stack - 1
 end
 
 -- Method to process a stack trace and the number of samples
-function Profiler:pop(status)
+function Profiler:pop(size)
   if #self.stack == 0 then
     error("Profiler attempted to pop an empty stack!")
   end
-  if status then
-    self.stack[#self.stack] = string.format("%s-%s", self.stack[#self.stack], status)
-  end
   self:flush()
-  table.remove(self.stack)
+
+  if size then
+    -- A specific size is provided, revert to that size
+    if size <= #self.stack then
+      while #self.stack > size do
+        table.remove(self.stack)
+      end
+    end
+  else
+    -- Default pop behavior, pop single element
+    table.remove(self.stack)
+  end
 end
 
 ---@type table<string, conform.FiletypeFormatter>
