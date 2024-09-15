@@ -30,7 +30,7 @@ function Profiler:push(trace)
   if #self.stack == 0 then
     error("Profiler used after it had an empty stack!")
   end
-  self.flush()
+  self:flush()
   table.insert(self.stack, trace)
 end
 
@@ -42,7 +42,7 @@ function Profiler:pop(status)
   if status then
     self.stack[#self.stack] = string.format("%s-%s", self.stack[#self.stack], status)
   end
-  self.flush()
+  self:flush()
   table.remove(self.stack)
 end
 
