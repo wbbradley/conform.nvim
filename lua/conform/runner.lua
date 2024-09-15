@@ -295,9 +295,10 @@ local last_run_errored = {}
 ---@param opts conform.RunOpts
 ---@param callback fun(err?: conform.Error, output?: string[])
 ---@return integer? job_id
-local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, callback)
+local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, callback, profiler)
   log.info("Run %s on %s", formatter.name, vim.api.nvim_buf_get_name(bufnr))
   log.trace("Input lines: %s", input_lines)
+  local start = uv.hrtime()
   callback = util.wrap_callback(callback, function(err)
     if err then
       if last_run_errored[formatter.name] then
@@ -316,6 +317,9 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
         code = errors.ERROR_CODE.RUNTIME,
         message = string.format("Formatter '%s' error: %s", formatter.name, err),
       })
+    end
+    if profiler then
+      profiler:stack({ "run_formatter", formatter.name }, uv.hrtime() - start)
     end
     return
   end
@@ -432,6 +436,12 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
       code = errors.ERROR_CODE.VIM_SYSTEM,
       message = string.format("Formatter '%s' error in vim.system: %s", formatter.name, job_or_err),
     })
+    if profiler then
+      profiler:stack(
+        { "run_formatter", string.format("%s-failed", formatter.name) },
+        uv.hrtime() - start
+      )
+    end
     return
   end
   pid = job_or_err.pid
@@ -439,6 +449,9 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
     vim.b[bufnr].conform_pid = pid
   end
 
+  if profiler then
+    profiler:stack({ "run_formatter", formatter.name }, uv.hrtime() - start)
+  end
   return pid
 end
 
@@ -626,7 +639,7 @@ end
 ---@return conform.Error? error
 ---@return string[] output_lines
 ---@return boolean all_support_range_formatting
-M.format_lines_sync = function(bufnr, formatters, timeout_ms, range, input_lines, opts)
+M.format_lines_sync = function(bufnr, formatters, timeout_ms, range, input_lines, opts, profiler)
   if bufnr == 0 then
     bufnr = vim.api.nvim_get_current_buf()
   end
@@ -660,7 +673,8 @@ M.format_lines_sync = function(bufnr, formatters, timeout_ms, range, input_lines
         final_err = errors.coalesce(final_err, err)
         done = true
         result = output
-      end
+      end,
+      profiler
     )
     all_support_range_formatting = all_support_range_formatting and truthy(config.range_args)
 
