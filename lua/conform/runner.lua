@@ -620,7 +620,7 @@ M.format_sync = function(bufnr, formatters, timeout_ms, range, opts, profiler)
     profiler:stack({ "format_sync", "preamble" }, uv.hrtime() - start)
   end
   local err, final_result, all_support_range_formatting =
-    M.format_lines_sync(bufnr, formatters, timeout_ms, range, original_lines, opts)
+    M.format_lines_sync(bufnr, formatters, timeout_ms, range, original_lines, opts, profiler)
   start = uv.hrtime()
   local did_edit = M.apply_format(
     bufnr,
