@@ -7,14 +7,15 @@ Profiler.__index = Profiler
 function Profiler.new(name)
   local self = setmetatable({}, Profiler)
   self.filepath = os.getenv("HOME") .. "/sample.profile"
-  self.uv = vim.uv or vim.loop
-  self.start = self.uv.hrtime()
+  local uv = vim.uv or vim.loop
+  self.start = uv.hrtime()
   self.stack = { name }
   return self
 end
 
 function Profiler:flush()
-  local now = self.uv.hrtime()
+  local uv = vim.uv or vim.loop
+  local now = uv.hrtime()
   local file, err = io.open(self.filepath, "a")
   if not file then
     error("Could not open file: " .. err)
@@ -23,7 +24,7 @@ function Profiler:flush()
   local collapsed_stack = table.concat(self.stack, ";")
   file:write(string.format("%s %d\n", collapsed_stack, now - self.start))
   file:close()
-  self.start = self.uv.hrtime()
+  self.start = uv.hrtime()
 end
 
 function Profiler:push(trace)
