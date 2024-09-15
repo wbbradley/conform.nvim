@@ -320,6 +320,7 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
         message = string.format("Formatter '%s' error: %s", formatter.name, err),
       })
     end
+    profiler:pop()
     return
   end
   ---@cast config conform.JobFormatterConfig
