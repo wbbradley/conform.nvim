@@ -296,9 +296,11 @@ local last_run_errored = {}
 ---@param callback fun(err?: conform.Error, output?: string[])
 ---@return integer? job_id
 local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, callback, profiler)
+  if profiler then
+    profiler:push("run_formatter")
+  end
   log.info("Run %s on %s", formatter.name, vim.api.nvim_buf_get_name(bufnr))
   log.trace("Input lines: %s", input_lines)
-  local start = uv.hrtime()
   callback = util.wrap_callback(callback, function(err)
     if err then
       if last_run_errored[formatter.name] then
@@ -317,9 +319,6 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
         code = errors.ERROR_CODE.RUNTIME,
         message = string.format("Formatter '%s' error: %s", formatter.name, err),
       })
-    end
-    if profiler then
-      profiler:stack({ "run_formatter", formatter.name }, uv.hrtime() - start)
     end
     return
   end
@@ -367,6 +366,9 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
   end
   local exit_codes = config.exit_codes or { 0 }
   local pid
+  if profiler then
+    profiler:push(formatter.name)
+  end
   local ok, job_or_err = pcall(
     vim.system,
     cmd,
@@ -431,16 +433,18 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
       end
     end)
   )
+  if profiler then
+    profiler:pop()
+  end
+
   if not ok then
     callback({
       code = errors.ERROR_CODE.VIM_SYSTEM,
       message = string.format("Formatter '%s' error in vim.system: %s", formatter.name, job_or_err),
     })
+
     if profiler then
-      profiler:stack(
-        { "run_formatter", string.format("%s-failed", formatter.name) },
-        uv.hrtime() - start
-      )
+      profiler:pop()
     end
     return
   end
@@ -450,7 +454,7 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
   end
 
   if profiler then
-    profiler:stack({ "run_formatter", formatter.name }, uv.hrtime() - start)
+    profiler:pop()
   end
   return pid
 end
@@ -646,6 +650,9 @@ end
 ---@return string[] output_lines
 ---@return boolean all_support_range_formatting
 M.format_lines_sync = function(bufnr, formatters, timeout_ms, range, input_lines, opts, profiler)
+  if profiler then
+    profiler:push("format_lines_sync")
+  end
   if bufnr == 0 then
     bufnr = vim.api.nvim_get_current_buf()
   end
@@ -656,6 +663,7 @@ M.format_lines_sync = function(bufnr, formatters, timeout_ms, range, input_lines
   for _, formatter in ipairs(formatters) do
     local remaining = timeout_ms - (uv.hrtime() / 1e6 - start)
     if remaining <= 0 then
+      profiler:pop("timeout")
       return errors.coalesce(final_err, {
         code = errors.ERROR_CODE.TIMEOUT,
         message = string.format("Formatter '%s' timeout", formatter.name),
@@ -693,6 +701,7 @@ M.format_lines_sync = function(bufnr, formatters, timeout_ms, range, input_lines
         uv.kill(pid)
       end
       if wait_reason == -1 then
+        profiler:pop("timeout")
         return errors.coalesce(final_err, {
           code = errors.ERROR_CODE.TIMEOUT,
           message = string.format("Formatter '%s' timeout", formatter.name),
@@ -700,6 +709,7 @@ M.format_lines_sync = function(bufnr, formatters, timeout_ms, range, input_lines
           input_lines,
           all_support_range_formatting
       else
+        profiler:pop("interrupted")
         return errors.coalesce(final_err, {
           code = errors.ERROR_CODE.INTERRUPTED,
           message = string.format("Formatter '%s' was interrupted", formatter.name),
@@ -711,7 +721,7 @@ M.format_lines_sync = function(bufnr, formatters, timeout_ms, range, input_lines
 
     input_lines = result or input_lines
   end
-
+  profiler:pop()
   return final_err, input_lines, all_support_range_formatting
 end
 

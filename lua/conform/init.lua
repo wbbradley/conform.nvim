@@ -4,23 +4,46 @@ local Profiler = {}
 Profiler.__index = Profiler
 --
 -- Construct a new profiler instance
-function Profiler.new()
+function Profiler.new(name)
   local self = setmetatable({}, Profiler)
   self.filepath = os.getenv("HOME") .. "/sample.profile"
-  vim.notify(string.format("Profiler created with path %s.", self.filepath))
+  self.uv = vim.uv or vim.loop
+  self.start = self.uv.hrtime()
+  self.stack = { name }
   return self
 end
 
--- Method to process a stack trace and the number of samples
-function Profiler:stack(trace, sample_count)
+function Profiler:flush()
+  local now = self.uv.hrtime()
   local file, err = io.open(self.filepath, "a")
   if not file then
     error("Could not open file: " .. err)
   end
 
-  local collapsed_stack = table.concat(trace, ";")
-  file:write(string.format("%s %d\n", collapsed_stack, sample_count))
+  local collapsed_stack = table.concat(self.stack, ";")
+  file:write(string.format("%s %d\n", collapsed_stack, now - self.start))
   file:close()
+  self.start = self.uv.hrtime()
+end
+
+function Profiler:push(trace)
+  if #self.stack == 0 then
+    error("Profiler used after it had an empty stack!")
+  end
+  self.flush()
+  table.insert(self.stack, trace)
+end
+
+-- Method to process a stack trace and the number of samples
+function Profiler:pop(status)
+  if #self.stack == 0 then
+    error("Profiler attempted to pop an empty stack!")
+  end
+  if status then
+    self.stack[#self.stack] = string.format("%s-%s", self.stack[#self.stack], status)
+  end
+  self.flush()
+  table.remove(self.stack)
 end
 
 ---@type table<string, conform.FiletypeFormatter>
@@ -532,7 +555,7 @@ M.format = function(opts, callback)
     log.debug("Running formatters on %s: %s", vim.api.nvim_buf_get_name(opts.bufnr), resolved_names)
     ---@type conform.RunOpts
     local run_opts = { exclusive = true, dry_run = opts.dry_run, undojoin = opts.undojoin }
-    local profiler = Profiler.new()
+    local profiler = Profiler.new("run_cli_formatters")
 
     if opts.async then
       runner.format_async(opts.bufnr, formatters, opts.range, run_opts, cb)
