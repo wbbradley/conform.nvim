@@ -296,10 +296,7 @@ local last_run_errored = {}
 ---@param callback fun(err?: conform.Error, output?: string[])
 ---@return integer? job_id
 local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, callback, profiler)
-  local stack_size_saved = 0
-  if profiler then
-    stack_size_saved = profiler:push("run_formatter")
-  end
+  profiler:push("run_formatter")
   log.info("Run %s on %s", formatter.name, vim.api.nvim_buf_get_name(bufnr))
   log.trace("Input lines: %s", input_lines)
   callback = util.wrap_callback(callback, function(err)
@@ -321,7 +318,6 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
         message = string.format("Formatter '%s' error: %s", formatter.name, err),
       })
     end
-    profiler:pop(stack_size_saved)
     return
   end
   ---@cast config conform.JobFormatterConfig
@@ -442,9 +438,6 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
       message = string.format("Formatter '%s' error in vim.system: %s", formatter.name, job_or_err),
     })
 
-    if profiler then
-      profiler:pop(stack_size_saved)
-    end
     return
   end
   pid = job_or_err.pid
@@ -452,9 +445,6 @@ local function run_formatter(bufnr, formatter, config, ctx, input_lines, opts, c
     vim.b[bufnr].conform_pid = pid
   end
 
-  if profiler then
-    profiler:pop(stack_size_saved)
-  end
   return pid
 end
 
