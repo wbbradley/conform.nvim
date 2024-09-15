@@ -7,7 +7,7 @@ Profiler.__index = Profiler
 function Profiler.new()
   local self = setmetatable({}, Profiler)
   self.filepath = os.getenv("HOME") .. "/sample.profile"
-  notify(string.format("Profiler created with path %s.", self.filepath))
+  vim.notify(string.format("Profiler created with path %s.", self.filepath))
   return self
 end
 
