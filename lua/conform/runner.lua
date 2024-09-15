@@ -686,7 +686,7 @@ M.format_lines_sync = function(bufnr, formatters, timeout_ms, range, input_lines
     local wait_result, wait_reason = vim.wait(remaining, function()
       return done
     end, 5)
-
+    profiler:pop(stack_size_saved + 1)
     if not wait_result then
       if pid then
         uv.kill(pid)
