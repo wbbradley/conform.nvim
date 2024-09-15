@@ -602,7 +602,8 @@ end
 ---@param opts conform.RunOpts
 ---@return conform.Error? error
 ---@return boolean did_edit
-M.format_sync = function(bufnr, formatters, timeout_ms, range, opts)
+M.format_sync = function(bufnr, formatters, timeout_ms, range, opts, profiler)
+  local start = uv.hrtime()
   if bufnr == 0 then
     bufnr = vim.api.nvim_get_current_buf()
   end
@@ -615,10 +616,12 @@ M.format_sync = function(bufnr, formatters, timeout_ms, range, opts)
       log.info("Canceled previous format job for %s", vim.api.nvim_buf_get_name(bufnr))
     end
   end
-
+  if profiler then
+    profiler:stack({ "format_sync", "preamble" }, uv.hrtime() - start)
+  end
   local err, final_result, all_support_range_formatting =
     M.format_lines_sync(bufnr, formatters, timeout_ms, range, original_lines, opts)
-
+  start = uv.hrtime()
   local did_edit = M.apply_format(
     bufnr,
     original_lines,
@@ -628,6 +631,9 @@ M.format_sync = function(bufnr, formatters, timeout_ms, range, opts)
     opts.dry_run,
     opts.undojoin
   )
+  if profiler then
+    profiler:stack({ "format_sync", "postamble" }, uv.hrtime() - start)
+  end
   return err, did_edit
 end
 

@@ -1,5 +1,28 @@
 local M = {}
 
+local Profiler = {}
+Profiler.__index = Profiler
+--
+-- Construct a new profiler instance
+function Profiler.new()
+  local self = setmetatable({}, Profiler)
+  self.filepath = os.getenv("HOME") .. "/sample.profile"
+  notify(string.format("Profiler created with path %s.", self.filepath))
+  return self
+end
+
+-- Method to process a stack trace and the number of samples
+function Profiler:stack(trace, sample_count)
+  local file, err = io.open(self.filepath, "a")
+  if not file then
+    error("Could not open file: " .. err)
+  end
+
+  local collapsed_stack = table.concat(trace, ";")
+  file:write(string.format("%s %d\n", collapsed_stack, sample_count))
+  file:close()
+end
+
 ---@type table<string, conform.FiletypeFormatter>
 M.formatters_by_ft = {}
 
@@ -509,11 +532,13 @@ M.format = function(opts, callback)
     log.debug("Running formatters on %s: %s", vim.api.nvim_buf_get_name(opts.bufnr), resolved_names)
     ---@type conform.RunOpts
     local run_opts = { exclusive = true, dry_run = opts.dry_run, undojoin = opts.undojoin }
+    local profiler = Profiler.new()
+
     if opts.async then
       runner.format_async(opts.bufnr, formatters, opts.range, run_opts, cb)
     else
       local err, did_edit =
-        runner.format_sync(opts.bufnr, formatters, opts.timeout_ms, opts.range, run_opts)
+        runner.format_sync(opts.bufnr, formatters, opts.timeout_ms, opts.range, run_opts, profiler)
       cb(err, did_edit)
     end
   end
@@ -565,29 +590,6 @@ M.format = function(opts, callback)
   end
 end
 
-local Profiler = {}
-Profiler.__index = Profiler
---
--- Construct a new profiler instance
-function Profiler.new()
-  local self = setmetatable({}, Profiler)
-  self.filepath = os.getenv("HOME") .. "/sample.profile"
-  notify(string.format("Profiler created with path %s.", self.filepath))
-  return self
-end
-
--- Method to process a stack trace and the number of samples
-function Profiler:stack(trace, sample_count)
-  local file, err = io.open(self.filepath, "a")
-  if not file then
-    error("Could not open file: " .. err)
-  end
-
-  local collapsed_stack = table.concat(trace, ";")
-  file:write(string.format("%s %d\n", collapsed_stack, sample_count))
-  file:close()
-end
-
 ---Process lines with formatters
 ---@private
 ---@param formatter_names string[]
@@ -626,12 +628,13 @@ M.format_lines = function(formatter_names, lines, opts, callback)
     callback(err, new_lines)
   end
 
+  local profiler = Profiler.new()
+
   ---@type conform.RunOpts
   local run_opts = { exclusive = false, dry_run = false, undojoin = false }
   if opts.async then
     runner.format_lines_async(opts.bufnr, formatters, nil, lines, run_opts, handle_err)
   else
-    local profiler = Profiler.new()
     local err, new_lines = runner.format_lines_sync(
       opts.bufnr,
       formatters,
